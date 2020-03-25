@@ -10,20 +10,16 @@
 #define GOAL 2331
 #define MAX_PAGE 1024
 
-int strong_ones[MAX_PAGE*32*8];
-int strong_zeros[MAX_PAGE*32*8];
-
-// uint8_t strong_bits[GOAL];
-long initial_delay = 330000;
-// long initial_delay = 1;
-// long initial_delay = 10980000;
-long step_delay = 50000;
-// long step_delay = 1;
-uint8_t bits[32 * MAX_PAGE];
 uint8_t buff[32];
 long ones_count = 0;
 long zeros_count = 0;
-
+long step_delay = 50000;
+long initial_delay = 330000;
+uint8_t bits[32 * MAX_PAGE];
+int strong_ones[MAX_PAGE*32*8];
+int strong_zeros[MAX_PAGE*32*8];
+int strongest_ones[MAX_PAGE*32*8];
+int strongest_zeros[MAX_PAGE*32*8];
 
 SRAM sram;
 
@@ -40,40 +36,10 @@ void read_pages() {
     }
 }
 
+//data remanence algorithm to identify strong cells in the SRAM
 int data_remanence(bool write_ones, long delay) {
-    // uint8_t send_data = 0xFF;
-    // uint8_t recv_data = 0x00;
-    int count = 0;
-    int bit_pos = 0;
-    int strong_bit_idx = 0;
-
-    // sram.turn_on();
-    // for (long address = 0; address < 1/*131072*/; address++) {
-    //     sram.write_byte(address, send_data);
-    // }
-    // sram.turn_off();
-
-    // usleep(delay);
-
-    // sram.turn_on();
-    // for (long address = 0; address < 1/*131072*/; address++) {
-    //     recv_data = sram.read_byte(address);
-    //     for (int i=7; i>=0; i--) {
-    //         if ( ((recv_data >> i) & 1) == 0 ) {
-    //             count++;
-    //         }
-    //         printf("%d ", (recv_data >> i) & 1); 
-    //     }
-    //     // printf("\n");
-    // }
-    // sram.turn_off();
-    // return count;
-    // printf("strong zero: %d\n", count);
-
-    // int ones = 0;
-    // int zeroes = 0;
-    // int pos = 0;
-
+    int strong_bit = 0;
+    int bit_position = 0;
 
     sram.turn_on();
     write_pages(write_ones);
@@ -87,28 +53,22 @@ int data_remanence(bool write_ones, long delay) {
 
     for (int i = 0; i < sizeof(bits); i++) {
         for (int j = 7; j >= 0; j--) {
-            // printf("%d ", (bits[i] >> j) & 1); 
-            // if (((bits[i] >> j) & 1) == 0) {
-            //     count++;
-            // }
             if ( write_ones == true ) {
                 if ( ( (bits[i] >> j) & 1 ) == 0 ) {
-                    count++;
-                    strong_zeros[strong_bit_idx] = bit_pos;
-                    strong_bit_idx++;
+                    strong_zeros[strong_bit] = bit_position;
+                    strong_bit++;
                 }
             }
             else {
                 if ( ( (bits[i] >> j) & 1 ) == 1 ) {
-                    count++;
-                    strong_ones[strong_bit_idx] = bit_pos;
-                    strong_bit_idx++;
+                    strong_ones[strong_bit] = bit_position;
+                    strong_bit++;
                 }
             }
-            bit_pos++;
+            bit_position++;
         }
     }
-    return count;
+    return strong_bit;
 }
 
 int get_strong_bits_by_goals(bool write_ones) {
@@ -129,10 +89,33 @@ int get_strong_bits_by_goals(bool write_ones) {
 void get_strong_bits() {
     bool write_ones = true;
     zeros_count = get_strong_bits_by_goals(write_ones);
-    // write_ones = false;
-    // ones_count = get_strong_cells_by_goals(write_ones);
+    write_ones = false;
+    ones_count = get_strong_bits_by_goals(write_ones);
     // printf("Zeros: %d\n", zeros_count);
     // printf("Ones: %d\n", ones_count);
+}
+
+void get_data_remanence() {
+    long current_delay = initial_delay;
+    bool write_ones = true;
+    FILE *fp;
+
+    // fp = fopen("dataRemanenceZeros.txt", "w+");
+    // while (current_delay < 1000000) {
+    //     zeros_count = data_remanence(write_ones, current_delay);
+    //     printf("DATA REMANENCE: %d delay: %ld\n", zeros_count, current_delay);
+    //     fprintf(fp, "DATA REMANENCE: %d delay: %ld\n", zeros_count, current_delay);
+    //     current_delay += 50000;
+    // }
+
+    write_ones = false;
+    fp = fopen("dataRemanenceOnes.txt", "w+");
+    while (current_delay < 1000000) {
+        ones_count = data_remanence(write_ones, current_delay);
+        printf("DATA REMANENCE: %d delay: %ld\n", ones_count, current_delay);
+        fprintf(fp, "DATA REMANENCE: %d delay: %ld\n", ones_count, current_delay);
+        current_delay += 30000;
+    }
 }
 
 int readBit(long location) {
@@ -142,114 +125,118 @@ int readBit(long location) {
     sram.turn_on();
     recv_data = sram.read_byte(loc);
     sram.turn_off();
-    printf("%d\n", (recv_data >> 7) & 1);
-    printf("%d\n", (recv_data >> (7 - (location % 8))) & 1);
-    printf("bits\n");
-    for (int i=7; i>=0; i--) {
-        printf("%d ", (recv_data >> i) & 1); 
-    }
-    return recv_data >> (7 - (location % 8)) & 0x1 == 1;
+    // printf("%d\n", (recv_data >> 7) & 1);
+    // printf("%d\n", (recv_data >> (7 - (location % 8))) & 1);
+    // printf("bits\n");
+    // for (int i=7; i>=0; i--) {
+    //     printf("%d ", (recv_data >> i) & 1); 
+    // }
+    return recv_data >> (7 - (location % 8)) & 1;
 }
 
-void get_data_remanence() {
-    long current_delay = 300000;
-    bool write_ones = false;
+void get_strongest_zero() {
     FILE *fp;
+    int count, strongest_count = 0;
 
-    // fp = fopen("dataRemanenceOnes.txt", "w+");
-
-    while (current_delay < 1000000) {
-        zeros_count = data_remanence(write_ones, current_delay);
-        printf("DATA REMANENCE: %d delay: %ld\n", zeros_count, current_delay);
-        // fprintf(fp, "DATA REMANENCE: %d delay: %ld\n", zeros_count, current_delay);
-        current_delay += 50000;
+    printf("Strong zeros: %d\n", zeros_count);
+    for (int i=0; i < zeros_count; i++) {
+        if ( readBit(strong_zeros[i]) == 1) {
+            // printf("Error at location: %ld\n", strong_zeros[i]);
+            count++;
+            // exit(1);
+        }
+        else {
+            strongest_zeros[strongest_count] = strong_zeros[i];
+            strongest_count++;
+        }
     }
-    
+    printf("Strong zeros error: %d\n", count);
 
-    // write_ones = false;
-    // ones_count = data_remanence(write_ones);
+    printf("Strongest zeros: %d\n", strongest_count);
+    fp = fopen("strongestZeros.txt", "w+");
+    count = 0;
+    for (int i=0; i < strongest_count; i++) {
+        if ( readBit(strongest_zeros[i]) == 1) {
+            // printf("Error at location: %ld\n", strong_zeros[i]);
+            count++;
+            // exit(1);
+        }
+        else {
+            fprintf(fp, "%d,", strongest_zeros[i]);
+        }
+    }
+    printf("Strongest zeros error: %d\n", count);
+    fclose(fp);
+}
+
+void get_strongest_one() {
+    FILE *fp;
+    int count, strongest_count = 0;
+
+    printf("Strong ones: %d\n", ones_count);
+    count, strongest_count = 0;
+    for (int i=0; i < ones_count; i++) {
+        if ( readBit(strong_ones[i]) == 0) {
+            // printf("Error at location: %ld\n", strong_zeros[i]);
+            count++;
+            // exit(1);
+        }
+        else {
+            strongest_ones[strongest_count] = strong_ones[i];
+            strongest_count++;
+        }
+    }
+    printf("Strong ones error: %d\n", count);
+
+    fp = fopen("strongestOnes.txt", "w+");
+    count = 0;
+    for (int i=0; i < strongest_count; i++) {
+        if ( readBit(strongest_ones[i]) == 0) {
+            // printf("Error at location: %ld\n", strong_zeros[i]);
+            count++;
+            // exit(1);
+        }
+        else {
+            fprintf(fp, "%d,", strongest_ones[i]);
+        }
+    }
+    printf("Strongest ones error: %d\n", count);
+    fclose(fp);
 }
 
 int main(int argc, char **argv){
+    bool write_ones = true;
     memset(strong_ones, 0, sizeof(strong_ones));
     memset(strong_zeros, 0, sizeof(strong_zeros));
+    memset(strongest_zeros, 0, sizeof(strongest_zeros));
 
-    get_data_remanence();
+    // get_data_remanence();
 
-    // get_strong_bits();
+    // get strong bits
+    zeros_count = get_strong_bits_by_goals(write_ones);
+    write_ones = false;
+    ones_count = get_strong_bits_by_goals(write_ones);
+    printf("--\n");
 
-    // long location = 0;
-    // long location_floor = 0;
-    // location = strong_zeros[234];
-    // int bit_value = 0;
-    // double loc = location / 8;
-    // location_floor = floor(location / 8);
-    // printf("lo %d\n", location);
-    // printf("%.8lf\n", loc);
-    // printf("%ld\n", location_floor);
+    // get strongest ones
+    get_strongest_zero();
+    printf("--\n");
+    get_strongest_one();
 
-    // if (readBit(location) == 1) {
-    //     printf("\n 1 \n");
-    // }
-    // else {
-    //     printf("\n 0 \n");
-    // }
+    // printf("%d ", readBit(47142));
+    // printf("%d ", readBit(60389));
+    // printf("%d ", readBit(34854));
+    // printf("%d ", readBit(96409));
+    // printf("%d ", readBit(38));
+    // printf("%d \n", readBit(195639));
 
-    // for (int i=7; i>=0; i--) {
-    //     printf("%d ", (recv_data >> i) & 1); 
-    // }
-    // printf("\n");
-    // printf("%d\n", strong_ones[553]);
-    // printf("%d\n", strong_zeros[234]);
-    // for (int i=0; i<ones_count; i++) {
-    //     printf("%d ", strong_ones[i]);
-    // }
-    // return 1;
+    // printf("%d ", readBit(48287));
+    // printf("%d ", readBit(262114));
+    // printf("%d ", readBit(261494));
+    // printf("%d ", readBit(22715));
+    // printf("%d ", readBit(136327));
+    // printf("%d \n", readBit(135));
 
-    // // long address = 4261413375;
-    // uint8_t send_data = 0xFF;
-    // // uint8_t recv_data = 0x00;
-    // // int count = 0;
-    // sram.turn_on();
-    // for (long address = 0; address < 1024; address++) {
-    //     sram.write_byte(address, send_data);
-    // }
-    // sram.turn_off();
-
-    // // sleep(current_delay + step_delay);
-
-    // sram.turn_on();
-    // for (long address = 0; address < 1024; address++) {
-    //     recv_data = sram.read_byte(address);
-    //     for (int i=7; i>=0; i--) {
-    //         if ( ((recv_data >> i) & 1) == 0 ) {
-    //             count++;
-    //         }
-    //         printf("%d ", (recv_data >> i) & 1); 
-    //     }
-    //     printf("\n");
-    // }
-    // sram.turn_off();
-    // printf("strong zero: %d\n", count);
-    // printf("%u\n", recv_data);
-    
-    // printf("%02x\n", send_data);
-    // for (int i=7; i>=0; i--) {
-    //     printf("%d ", (recv_data >> i) & 1); 
-    // }
-    // printf("\n");
-    // printf("\n%d ", (send_data >> 7) & 1);
-    // printf("%d ", (send_data >> 6) & 1);
-    // printf("%d ", (send_data >> 5) & 1);
-    // printf("%d \n", (send_data >> 4) & 1);
-    // printf("%d ", (send_data >> 3) & 1);
-    // printf("%d ", (send_data >> 2) & 1);
-    // printf("%d ", (send_data >> 1) & 1);
-    // printf("%d \n", (send_data) & 1);
-
-    // if ( ((send_data >> 7) & 1) == 0) {
-    //     printf("zero");
-    // }
 
     ////////////////////////////////////////////////////////////////////////////
     // check if its working
