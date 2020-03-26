@@ -213,29 +213,29 @@ int main(int argc, char **argv){
     // get_data_remanence();
 
     // get strong bits
-    zeros_count = get_strong_bits_by_goals(write_ones);
-    write_ones = false;
-    ones_count = get_strong_bits_by_goals(write_ones);
-    printf("--\n");
+    // zeros_count = get_strong_bits_by_goals(write_ones);
+    // write_ones = false;
+    // ones_count = get_strong_bits_by_goals(write_ones);
+    // printf("--\n");
 
-    // get strongest ones
-    get_strongest_zero();
-    printf("--\n");
-    get_strongest_one();
+    // // get strongest ones
+    // get_strongest_zero();
+    // printf("--\n");
+    // get_strongest_one();
 
-    // printf("%d ", readBit(47142));
-    // printf("%d ", readBit(60389));
-    // printf("%d ", readBit(34854));
-    // printf("%d ", readBit(96409));
-    // printf("%d ", readBit(38));
-    // printf("%d \n", readBit(195639));
+    printf("%d ", readBit(47142));
+    printf("%d ", readBit(60389));
+    printf("%d ", readBit(34854));
+    printf("%d ", readBit(96409));
+    printf("%d ", readBit(38));
+    printf("%d \n", readBit(195639));
 
-    // printf("%d ", readBit(48287));
-    // printf("%d ", readBit(262114));
-    // printf("%d ", readBit(261494));
-    // printf("%d ", readBit(22715));
-    // printf("%d ", readBit(136327));
-    // printf("%d \n", readBit(135));
+    printf("%d ", readBit(48287));
+    printf("%d ", readBit(262114));
+    printf("%d ", readBit(234649));
+    printf("%d ", readBit(22715));
+    printf("%d ", readBit(136327));
+    printf("%d \n", readBit(135));
 
 
     ////////////////////////////////////////////////////////////////////////////
