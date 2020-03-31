@@ -28,7 +28,7 @@ void getLocation() {
     int index = 0;
     char location[10];
 
-    if ((fp = fopen("c-21", "r")) == NULL) {
+    if ((fp = fopen("c-87", "r")) == NULL) {
         printf("Error Opening File");
         exit(1);
     }

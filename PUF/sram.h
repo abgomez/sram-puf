@@ -12,11 +12,6 @@
 #include <math.h>
 #include <bcm2835.h>
 
-
-// // #include "string.h"
-// // #include "Arduino.h"
-// // #include <SPI.h>
-
 using namespace std;
 
 class SRAM {
@@ -29,17 +24,6 @@ private:
     void read32(uint32_t address, uint8_t* buffer);
     void write32(uint32_t address, uint8_t* buffer);
   
-
-//   uint8_t pin_cs;
-//   uint8_t pin_hold;
-//   uint8_t pin_power;
-//   uint8_t pin_mosi;
-//   uint8_t pin_miso;
-//   uint8_t pin_sck;
-
-  
-
-
 public:
     SRAM();
     
@@ -49,41 +33,12 @@ public:
     void turn_off();
     void turn_on();
     
-   
     void write_page(long page, bool is_one);
     void read_page(uint32_t page, uint8_t* result);
     uint8_t read_byte(long location);
     void write_byte(long address, uint8_t data);
     void write_all_zero();
     void write_all_one();
-
-
-
-// //   void set_pin_cs(uint8_t pin);
-
-// //   void set_pin_hold(uint8_t pin);
-
-// //   void set_pin_power(uint8_t pin);
-
-// //   void set_pin_mosi(uint8_t pin);
-
-// //   void set_pin_miso(uint8_t pin);
-
-// //   void set_pin_sck(uint8_t pin);
-
-    
-
-// //   void read_all();
-
-
-
-
-
-
-
-
-
-
 };
 
 #endif //SRAM_H

@@ -64,9 +64,7 @@ void SRAM::turn_on() {
     bcm2835_spi_setBitOrder(BCM2835_SPI_BIT_ORDER_MSBFIRST);
     bcm2835_spi_setDataMode(BCM2835_SPI_MODE0);
     bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_32);
-    // bcm2835_spi_set_speed_hz(16000000);
     bcm2835_spi_chipSelect(BCM2835_SPI_CS_NONE);
-    // bcm2835_spi_setChipSelectPolarity(BCM2835_SPI_CS0, HIGH);
 
     bcm2835_gpio_fsel(CS_PIN, BCM2835_GPIO_FSEL_OUTP);
     bcm2835_gpio_fsel(PW_PIN, BCM2835_GPIO_FSEL_OUTP);
@@ -112,13 +110,7 @@ uint8_t SRAM::read_byte(long location) {
 void SRAM::write32(uint32_t address, uint8_t* buffer) {
     uint32_t i;
 
-    // bcm2835_gpio_write(CS_PIN, LOW);
-    // bcm2835_spi_transfer(WRSR);
-    // bcm2835_spi_transfer(PAGE_MODE);
-    // bcm2835_gpio_write(CS_PIN, HIGH);
-    // bcm2835_spi_transfer(RDSR);
     bcm2835_gpio_write(CS_PIN, LOW);
-    // bcm2835_spi_setChipSelectPolarity(BCM2835_SPI_CS0, LOW);
     bcm2835_spi_transfer(WRITE);
 	bcm2835_spi_transfer((uint8_t) (address >> 16));
 	bcm2835_spi_transfer((uint8_t) (address >> 8));
@@ -127,20 +119,13 @@ void SRAM::write32(uint32_t address, uint8_t* buffer) {
         bcm2835_spi_transfer(buffer[i]);
     }
     bcm2835_gpio_write(CS_PIN, HIGH);
-    // bcm2835_spi_setChipSelectPolarity(BCM2835_SPI_CS0, HIGH);
 }
 
 void SRAM::read32(uint32_t address, uint8_t* buffer) {
     uint32_t i;
     uint8_t read_page;
     
-    // bcm2835_gpio_write(CS_PIN, LOW);
-    // bcm2835_spi_transfer(WRSR);
-    // bcm2835_spi_transfer(PAGE_MODE);
-    // bcm2835_gpio_write(CS_PIN, HIGH);
-    // bcm2835_spi_transfer(RDSR);
     bcm2835_gpio_write(CS_PIN, LOW);
-    // bcm2835_spi_setChipSelectPolarity(BCM2835_SPI_CS0, LOW);
     bcm2835_spi_transfer(READ);
 	bcm2835_spi_transfer((uint8_t) (address >> 16));
 	bcm2835_spi_transfer((uint8_t) (address >> 8));
@@ -151,7 +136,6 @@ void SRAM::read32(uint32_t address, uint8_t* buffer) {
         buffer[i] = read_page;
     }
     bcm2835_gpio_write(CS_PIN, HIGH);
-    // bcm2835_spi_setChipSelectPolarity(BCM2835_SPI_CS0, HIGH);
 }
 
 void SRAM::write_page(long page, bool is_one) {
@@ -198,57 +182,3 @@ void SRAM::write_all_one() {
         write32(i, bufferFF);
     }
 }
-
-
-
-
-
-
-
-
-
-// void
-// SRAM::set_pin_cs(uint8_t pin){
-//   pin_cs = pin;
-// }
-
-// void
-// SRAM::set_pin_hold(uint8_t pin){
-//   pin_hold = pin;
-// }
-
-// void
-// SRAM::set_pin_power(uint8_t pin){
-//   pin_power = pin;
-// }
-
-// void
-// SRAM::set_pin_mosi(uint8_t pin){
-//   pin_mosi = pin;
-// }
-
-// void
-// SRAM::set_pin_miso(uint8_t pin){
-//   pin_miso = pin;
-// }
-
-// void
-// SRAM::set_pin_sck(uint8_t pin){
-//   pin_sck = pin;
-// }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
