@@ -1,13 +1,16 @@
 /*
 * Created by Abel Gomez 03/31/2020
 */
-#include <stdio.h>
+
 #include <string.h>
 #include <stdlib.h>
-#include <errno.h>
 #include <modbus.h>
+#include <stdio.h>
+#include <errno.h>
+#include <time.h>
 
-#define CHALLENGE_SIZE MODBUS_MAX_READ_REGISTERS
+
+#define CHALLENGE_SIZE MODBUS_MAX_WRITE_REGISTERS
 #define SLAVE_IP "127.0.0.1"
 #define MODBUS_PORT 1502
 #define GET_CHALLENGE 0  //0b00
@@ -16,13 +19,15 @@
 modbus_t *context;
 uint8_t  *bit;
 uint8_t  *slave_mode;
+uint8_t  *response;
 uint16_t *registers;
 uint16_t *challenge;
+
 
 int initialize() {
     /* Set response timeout*/
     modbus_set_byte_timeout(context, 0, 0);
-    modbus_set_response_timeout(context, 5, 0);
+    modbus_set_response_timeout(context, 60, 0);
 
     /* Allocate and initialize the memory to store the status */
     bit = (uint8_t *) malloc(MODBUS_MAX_READ_BITS * sizeof(uint8_t));
@@ -55,6 +60,14 @@ int initialize() {
         return -1;
     }
     memset(challenge, 0, CHALLENGE_SIZE * sizeof(uint16_t));
+
+    /* Allocate and initialize the memory to store the challenge */
+    response = (uint8_t *) malloc(CHALLENGE_SIZE * sizeof(uint8_t));
+    if (response == NULL) {
+        fprintf(stderr, "Failed to allocated memory");
+        return -1;
+    }
+    memset(response, 0, CHALLENGE_SIZE * sizeof(uint8_t));
 
     return 0;
 }
@@ -107,7 +120,10 @@ int getMode() {
 }
 
 int getChallenge() {
+    FILE *fp;
     int rc = 0;
+    int challenge_no = 0;
+    char challenge_name[3];
     
     rc = modbus_read_registers(context, 0, CHALLENGE_SIZE, registers);
     
@@ -116,10 +132,18 @@ int getChallenge() {
         return -1;
     }
 
+    srand(time(NULL));
+    challenge_no = rand() % 99;
+    // challenge[0] = 'c';
+    sprintf(challenge_name, "c%d", challenge_no);
+    fp = fopen(challenge_name, "w+");
     for (int i=0; i < CHALLENGE_SIZE; i++) {
-        printf("%ld ", registers[i]);
+        challenge[i] = registers[i];
+        printf("%ld ", challenge[i]);
+        fprintf(fp, "%d\n", challenge[i]);
     }
     printf("\n");
+    fclose(fp);
 
     return 0;
 }
@@ -127,11 +151,9 @@ int getChallenge() {
 int main(int arcg, char **argv){
     /* Connect to slave */
     context = modbus_new_tcp(SLAVE_IP, MODBUS_PORT);
-    // modbus_set_byte_timeout(context, 0, 0);
-    // modbus_set_response_timeout(context, 1, 0);
+
     if (modbus_connect(context) == -1) {
-        fprintf(stderr, "Connection failed: %s\n",
-                modbus_strerror(errno));
+        fprintf(stderr, "Connection failed: %s\n", modbus_strerror(errno));
         modbus_free(context);
         exit(EXIT_FAILURE);
     }
