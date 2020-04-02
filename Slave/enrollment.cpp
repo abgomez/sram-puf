@@ -36,7 +36,8 @@ long initial_delay = 330000;
 // uint16_t *challenge;
 // uint16_t *strong_ones;
 
-uint16_t challenge[USHRT_MAX*2];
+uint16_t challenge[USHRT_MAX];
+uint16_t response[USHRT_MAX];
 uint16_t strong_ones[USHRT_MAX];
 uint16_t strong_zeros[USHRT_MAX];
 uint16_t strongest_ones[USHRT_MAX];
@@ -86,10 +87,10 @@ int initialize() {
 uint8_t getMode() {
     uint8_t mode = 0;
     if (modbus_mapping->tab_bits[0] == (uint8_t) 1) {
-        mode++;
+        mode +=2;
     }
     if (modbus_mapping->tab_bits[1] == (uint8_t) 1) {
-        mode += 2;
+        mode ++;
     }
     return mode;
 }
@@ -253,9 +254,15 @@ void createChallenge() {
     memcpy(challenge, strongest_ones, strongest_one_count*sizeof(uint16_t));
     memcpy(&challenge[strongest_one_count], strongest_zeros, strongest_zero_count*sizeof(uint16_t));
 
-    // for (int i = 0; i < CHALLENGE_SIZE; i++) {
+    // for (int i = 0; i < strongest_one_count; i++) {
+    //     printf("%d ", strongest_ones[i]);
+    // }
+    // printf("\n\n");
+
+    // for (int i = 0; i < challenge_count; i++) {
     //     printf("%d ", challenge[i]);
     // }
+    // printf("\n\n");
 
     randomize(challenge_count);
     // printf("\n\n");
@@ -295,6 +302,16 @@ void getChallenge() {
     // printf("\n");
 }
 
+void getResponse() {
+    for (int i=0; i < CHALLENGE_SIZE; i++) {
+        challenge[i] = modbus_mapping->tab_registers[i];
+        response[i] = readBit(challenge[i]);
+        modbus_mapping->tab_registers[i] = response[i];
+        printf("%d ", response[i]);
+    }
+    printf("\n\n");
+}
+
 int main(int argc, char **argv){
     int rc;
 
@@ -329,6 +346,9 @@ int main(int argc, char **argv){
                     if (mode == 0) { //get challenge
                         getChallenge();
                     }
+                    else if (mode == 1) {
+                        getResponse();
+                    }
                     break;
             }
             modbus_reply(context, query, rc, modbus_mapping);
@@ -345,120 +365,5 @@ int main(int argc, char **argv){
     close(socket);
     modbus_free(context);
 
-    // get_data_remanence();
-
-
-
-    // bool write_ones = true;
-    // memset(strong_ones, 0, sizeof(strong_ones));
-    // memset(strong_zeros, 0, sizeof(strong_zeros));
-    // memset(strongest_zeros, 0, sizeof(strongest_zeros));
-
-    
-
-    // get strong bits
-    // zeros_count = get_strong_bits_by_goals(write_ones);
-    // write_ones = false;
-    // ones_count = get_strong_bits_by_goals(write_ones);
-    // printf("--\n");
-
-    // // get strongest ones
-    // get_strongest_zero();
-    // printf("--\n");
-    // get_strongest_one();
-
-    // printf("%d ", readBit(47142));
-    // printf("%d ", readBit(60389));
-    // printf("%d ", readBit(34854));
-    // printf("%d ", readBit(96409));
-    // printf("%d ", readBit(38));
-    // printf("%d \n", readBit(195639));
-
-    // printf("%d ", readBit(48287));
-    // printf("%d ", readBit(262114));
-    // printf("%d ", readBit(234649));
-    // printf("%d ", readBit(22715));
-    // printf("%d ", readBit(136327));
-    // printf("%d \n", readBit(135));
     return 0;
 }
-
-
-
-
-
-// #include <stdio.h>
-// #include <unistd.h>
-// #include <string.h>
-// #include <stdlib.h>
-
-
-// int main(int argc, char *argv[])
-// {
-    // int socket;
-    // modbus_t *ctx;
-    // modbus_mapping_t *mb_mapping;
-    // int rc;
-    // int use_backend;
-
-    
-
-    // mb_mapping = modbus_mapping_new(MODBUS_MAX_READ_BITS, 0, MODBUS_MAX_READ_REGISTERS, 0);
-    // if (mb_mapping == NULL) {
-    //     fprintf(stderr, "Failed to allocate the mapping: %s\n",
-    //             modbus_strerror(errno));
-    //     modbus_free(ctx);
-    //     return -1;
-    // }
-
-    
-
-    // for(;;) {
-    //     uint8_t query[MODBUS_TCP_MAX_ADU_LENGTH];
-    //     int offset;
-    //     int function;
-
-    //     rc = modbus_receive(ctx, query);
-    //     // offset = ctx->backend->header_lenght;
-    //     function = query[modbus_get_header_length(ctx)];
-    //     // printf("0x%X\n\n", function);
-    //     // for (int i=0; i <MODBUS_TCP_MAX_ADU_LENGTH; i++){
-    //     //     printf("0x%X ", query[i]);
-    //     // }
-    //     // printf("\n");
-    //     if (rc >= 0) {
-    //         printf("Replying to request.\n");
-    //         switch (function) {
-    //             case 0x10:
-    //                 printf("Write\n");
-    //                 break;
-    //             case 0x3:
-    //                 printf("Read\n");
-    //                 break;
-    //         }
-            // mb_mapping->tab_registers[0] = 0x2;
-            // mb_mapping->tab_registers[1] = 0x41;
-
-            // mb_mapping->tab_bits[0] = (uint8_t) 1;
-            // mb_mapping->tab_bits[1] = (uint8_t) 0;
-            // for (int i=0; i < 4; i++) {
-            //     printf("reg[%d]=%d (%c)\n", i, mb_mapping->tab_registers[i], mb_mapping->tab_registers[i]);
-    //         // }
-    //         modbus_reply(ctx, query, rc, mb_mapping);
-    //     } else {
-    //         /* Connection closed by the client or server */
-    //         modbus_close(ctx); // close
-    //         // immediately start waiting for another request again
-    //         printf("Waiting for TCP connection...\n");
-    //         modbus_tcp_accept(ctx, &socket);
-    //     }
-    // }
-
-    // printf("Quit the loop: %s\n", modbus_strerror(errno));
-
-//     modbus_mapping_free(mb_mapping);
-//     close(socket);
-//     modbus_free(ctx);
-
-//     return 0;
-// }
