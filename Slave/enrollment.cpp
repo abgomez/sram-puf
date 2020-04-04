@@ -13,11 +13,19 @@
 #include <modbus.h>
 #include "../PUF/sram.h"
 
-#define GOAL 2331
+/*
+* Slave - Mode of Operation, 4 bits
+*/
+#define MODE 4
+#define DEFAULT 0b0000
+#define NEW_CHALLENGE 0b0001
+#define WRITE_CHALLENGE 0b0010
+#define FINISH_CHALLENGE 0b0011
+
 #define MAX_PAGE 1024
-#define CHALLENGE_SIZE MODBUS_MAX_WRITE_REGISTERS
-#define MASTER_IP "127.0.0.1"
+#define IP "127.0.0.1"
 #define MODBUS_PORT 1502
+#define CHALLENGE_SIZE 256
 
 
 SRAM sram;
@@ -25,16 +33,18 @@ modbus_t *context;
 modbus_mapping_t *modbus_mapping;
 
 int socket;
-int strongest_one_count;
-int strongest_zero_count;
+// int strongest_one_count;
+// int strongest_zero_count;
 
 long ones_count = 0;
 long zeros_count = 0;
 long step_delay = 50000;
 long initial_delay = 330000;
+long strongest_one_count = 0;
+long strongest_zero_count = 0;
 
-// uint16_t *challenge;
-// uint16_t *strong_ones;
+uint8_t buff[32];
+uint8_t bits[32 * MAX_PAGE];
 
 uint16_t challenge[USHRT_MAX];
 uint16_t response[USHRT_MAX];
@@ -45,25 +55,31 @@ uint16_t strongest_zeros[USHRT_MAX];
 uint16_t strongest_ones_tmp[USHRT_MAX];
 uint16_t strongest_zeros_tmp[USHRT_MAX];
 
-uint8_t buff[32];
-uint8_t bits[32 * MAX_PAGE];
-
 int initialize() {
+    printf("running itnialize\n");
     /* Allocate and initialize the memory to store the modbus mapping */
-    modbus_mapping = modbus_mapping_new(MODBUS_MAX_READ_BITS, 0, MODBUS_MAX_READ_REGISTERS, 0);
-    if (modbus_mapping == NULL) {
-        fprintf(stderr, "Failed to allocate the mapping: %s\n", modbus_strerror(errno));
-        modbus_free(context);
-        return -1;
-    }
+    // modbus_mapping = modbus_mapping_new(MODBUS_MAX_READ_BITS, 0, MODBUS_MAX_READ_REGISTERS, 0);
+    // if (modbus_mapping == NULL) {
+    //     fprintf(stderr, "Failed to allocate the mapping: %s\n", modbus_strerror(errno));
+    //     modbus_free(context);
+    //     return -1;
+    // }
 
     // /* Allocate and initialize the memory to store the challenge */
-    // challenge = (uint16_t *) malloc((MAX_PAGE*32*8) * sizeof(uint16_t));
+    // challenge = (uint16_t *) malloc(challenge_size * sizeof(uint16_t));
     // if (challenge == NULL) {
     //     fprintf(stderr, "Failed to allocated memory");
     //     return -1;
     // }
-    // memset(challenge, 0, CHALLENGE_SIZE * sizeof(uint16_t));
+    // memset(challenge, 0, challenge_size * sizeof(uint16_t));
+
+    // /* Allocate and initialize the memory to store strong ones*/
+    // strong_ones = (uint16_t *) malloc(challenge_size * sizeof(uint16_t));
+    // if (challenge == NULL) {
+    //     fprintf(stderr, "Failed to allocated memory");
+    //     return -1;
+    // }
+    // memset(strong_ones, 0, challenge_size * sizeof(uint16_t));
 
     //  /* Allocate and initialize the memory to store the challenge */
     // strong_ones = (uint16_t *) malloc(50000 * sizeof(uint16_t));
@@ -73,25 +89,33 @@ int initialize() {
     // }
     // memset(strong_ones, 0, 50000 * sizeof(uint16_t));
 
-    memset(challenge, 0, sizeof(challenge));
-    memset(strong_ones, 0, sizeof(strong_ones));
-    memset(strong_zeros, 0, sizeof(strong_zeros));
-    memset(strongest_ones, 0, sizeof(strongest_ones));
-    memset(strongest_zeros, 0, sizeof(strongest_zeros));
-    memset(strongest_ones_tmp, 0, sizeof(strongest_ones_tmp));
-    memset(strongest_zeros_tmp, 0, sizeof(strongest_zeros_tmp));
+    // memset(challenge, 0, sizeof(challenge));
+    // memset(strong_ones, 0, sizeof(strong_ones));
+    // memset(strong_zeros, 0, sizeof(strong_zeros));
+    // memset(strongest_ones, 0, sizeof(strongest_ones));
+    // memset(strongest_zeros, 0, sizeof(strongest_zeros));
+    // memset(strongest_ones_tmp, 0, sizeof(strongest_ones_tmp));
+    // memset(strongest_zeros_tmp, 0, sizeof(strongest_zeros_tmp));
 
     return 0;
 }
 
 uint8_t getMode() {
     uint8_t mode = 0;
+
     if (modbus_mapping->tab_bits[0] == (uint8_t) 1) {
-        mode +=2;
+        mode +=8;
     }
     if (modbus_mapping->tab_bits[1] == (uint8_t) 1) {
+        mode +=4;
+    }
+    if (modbus_mapping->tab_bits[2] == (uint8_t) 1) {
+        mode +=2;
+    }
+    if (modbus_mapping->tab_bits[3] == (uint8_t) 1) {
         mode ++;
     }
+
     return mode;
 }
 
@@ -116,7 +140,7 @@ int data_remanence(bool write_ones, long delay) {
     sram.turn_on();
     write_pages(write_ones);
     sram.turn_off();
-
+    
     usleep(delay);
 
     sram.turn_on();
@@ -154,7 +178,7 @@ int get_strong_bit_by_goal(bool write_ones) {
         current_goal = data_remanence(write_ones, current_delay);
         printf("DATA REMANENCE: %d delay: %ld\n", current_goal, current_delay);
 
-        if (current_goal < GOAL) {
+        if (current_goal < CHALLENGE_SIZE) {
             current_delay += step_delay;
         }
     }
@@ -248,6 +272,8 @@ void randomize(int n) {
 
 void createChallenge() {
     int challenge_count = strongest_one_count + strongest_zero_count;
+    
+    memset(challenge, 0, sizeof(challenge));
 
     printf("Challenge bits: %d\n", challenge_count);
 
@@ -277,6 +303,13 @@ void createChallenge() {
 void getChallenge() {
     bool write_ones;
 
+    memset(strong_ones, 0, sizeof(strong_ones));
+    memset(strong_zeros, 0, sizeof(strong_zeros));
+    memset(strongest_ones, 0, sizeof(strongest_ones));
+    memset(strongest_zeros, 0, sizeof(strongest_zeros));
+    memset(strongest_ones_tmp, 0, sizeof(strongest_ones_tmp));
+    memset(strongest_zeros_tmp, 0, sizeof(strongest_zeros_tmp));
+
     // get strong bits
     write_ones = false;
     ones_count = get_strong_bit_by_goal(write_ones);
@@ -289,10 +322,9 @@ void getChallenge() {
 
     createChallenge();
 
-    printf("\n");
-    for (int i = 0; i < CHALLENGE_SIZE; i++) {
+    for (int i = 0; i < MODBUS_MAX_READ_REGISTERS; i++) {
         modbus_mapping->tab_registers[i] = challenge[i];
-        printf("%d ", challenge[i]);
+        printf("%ld ", challenge[i]);
     }
     printf("\n\n");
 
@@ -303,9 +335,9 @@ void getChallenge() {
 }
 
 void getResponse() {
-    for (int i=0; i < CHALLENGE_SIZE; i++) {
-        challenge[i] = modbus_mapping->tab_registers[i];
-        response[i] = readBit(challenge[i]);
+    for (int i=0; i < MODBUS_MAX_WRITE_REGISTERS; i++) {
+        // challenge[i] = modbus_mapping->tab_registers[i];
+        response[i] = readBit(modbus_mapping->tab_registers[i]);
         modbus_mapping->tab_registers[i] = response[i];
         printf("%d ", response[i]);
     }
@@ -316,42 +348,62 @@ int main(int argc, char **argv){
     int rc;
 
     // Initialize connection
+    /* TODO: change communication link and add multiple slaves*/
     printf("Waiting for connection...\n");
-    context = modbus_new_tcp(MASTER_IP, MODBUS_PORT);
+    context = modbus_new_tcp(IP, MODBUS_PORT);
     socket = modbus_tcp_listen(context, 1);
     modbus_tcp_accept(context, &socket);
 	printf("Connection started!\n");
 
-    if (initialize() != 0) {
-        printf("Failed to allocated memory");
-        exit(EXIT_FAILURE);
+    /* Allocate and initialize the memory to store the modbus mapping */
+    modbus_mapping = modbus_mapping_new(MODBUS_MAX_READ_BITS, 0, MODBUS_MAX_READ_REGISTERS, 0);
+    if (modbus_mapping == NULL) {
+        fprintf(stderr, "Failed to allocate the mapping: %s\n", modbus_strerror(errno));
+        modbus_free(context);
+        return -1;
     }
+
+    // if (initialize() != 0) {
+    //     printf("Failed to allocated memory");
+    //     exit(EXIT_FAILURE);
+    // }
 
     for(;;) {
         uint8_t query[MODBUS_TCP_MAX_ADU_LENGTH];
-        int function_code;
+        uint8_t function_code;
         uint8_t mode;
 
         rc = modbus_receive(context, query);
         function_code = query[modbus_get_header_length(context)];
         if (rc >= 0) {
-            printf("Replying to request: 0x%02X\n", function_code);
+            printf("Replying to request: 0x%02X ", function_code);
             switch (function_code) {
-                case 0x10:
-                    printf("Write\n");
+                case 0x0F:
+                    printf("(Set Mode)\n");
                     break;
-                case 0x3: //Read Registers
+                case 0x06:
+                    printf("(Set Challenge Size)\n");    
+                    break;
+                case 0x10:
+                    printf("(Write Register)\n");
+                    break;
+                case 0x3:
+                    printf("(Read Register)\n");
                     mode = getMode();
                     printf("Working on mode: %d\n", mode);
-                    if (mode == 0) { //get challenge
+                    if (mode == 2) { //write challenge
                         getChallenge();
                     }
-                    else if (mode == 1) {
+                    else if (mode == 4) { //write response
                         getResponse();
                     }
                     break;
             }
             modbus_reply(context, query, rc, modbus_mapping);
+            // if (function_code == 0x06) {
+            //     challenge_size = modbus_mapping->tab_registers[0];
+            //     printf("Challenge size: %ld\n", challenge_size);
+            // }
         } else {
             /* Connection closed by the client or server */
             modbus_close(context); // close
