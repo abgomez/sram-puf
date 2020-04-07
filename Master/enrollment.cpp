@@ -28,6 +28,7 @@ modbus_t *context;
 
 uint8_t  *bits;
 uint8_t  *slave_mode;
+uint8_t  *final_response;
 
 uint16_t *registers;
 uint16_t *challenge;
@@ -55,6 +56,14 @@ int initialize() {
         return -1;
     }
     memset(slave_mode, 0, MODE * sizeof(uint8_t));
+
+     /* Allocate and initialize the memory to store the final response */
+    final_response = (uint8_t *) malloc((CHALLENGE_SIZE / 8) * sizeof(uint8_t));
+    if (final_response == NULL) {
+        fprintf(stderr, "Failed to allocated memory");
+        return -1;
+    }
+    memset(final_response, 0, (CHALLENGE_SIZE / 8) * sizeof(uint8_t));
 
     /* Allocate and initialize the memory to store the registers */
     registers = (uint16_t *) malloc(MODBUS_MAX_READ_REGISTERS * sizeof(uint16_t));
@@ -211,6 +220,64 @@ int getChallenge() {
     return 0;
 }
 
+void format_response() {
+    int a = 0;
+    int b = 0;
+    // int sub_key[] = {0,0,0,0,0,0,0,0};
+    uint8_t tmp_key;
+
+    for (int i = 0; i < CHALLENGE_SIZE/8; i++) {
+        tmp_key = 0;
+        for (int j = 0; j < 7; j++) {
+            // sub_key[j] = response[a+j];
+            switch (j) {
+                case 0:
+                    if (response[a+j] == 1) {
+                        tmp_key += 128;
+                    }
+                    break;
+                case 1:
+                    if (response[a+j] == 1) {
+                        tmp_key += 64;
+                    }
+                    break;
+                case 2:
+                    if (response[a+j] == 1) {
+                        tmp_key += 32;
+                    }
+                    break;
+                case 3:
+                    if (response[a+j] == 1) {
+                        tmp_key += 16;
+                    }
+                    break;
+                case 4:
+                    if (response[a+j] == 1) {
+                        tmp_key += 8;
+                    }
+                    break;
+                case 5:
+                    if (response[a+j] == 1) {
+                        tmp_key += 4;
+                    }
+                    break;
+                case 6:
+                    if (response[a+j] == 1) {
+                        tmp_key += 2;
+                    }
+                    break;
+                case 7:
+                    if (response[a+j] == 1) {
+                        tmp_key++;
+                    }
+                    break;
+            }
+        }
+        final_response[i] = tmp_key;
+        a +=8;
+    }
+}
+
 int getResonse() {
     FILE *fp;
     int rc = 0;
@@ -259,44 +326,25 @@ int getResonse() {
         memcpy(&response[section_no*MODBUS_MAX_WRITE_REGISTERS], registers, remainder_bit*sizeof(uint16_t));
     }
 
-
-    sprintf(response_name, "r%d", challenge_no);
-    fp = fopen(response_name, "w+");
     for (int i=0; i < CHALLENGE_SIZE; i++) {
         printf("%d ", response[i]);
-        fprintf(fp, "%d\n", response[i]);
+        // printf("%d ", MODBUS_GET_LOW_BYTE(response[i]));
+        // fprintf(fp, "%d\n", response[i]);
+    }
+    printf("\n\n");
+    // fclose(fp);
+
+    format_response();
+
+    printf("\n\n");
+    sprintf(response_name, "r%d", challenge_no);
+    fp = fopen(response_name, "w+");
+    for (int i=0; i < CHALLENGE_SIZE/8; i++) {
+        printf("%d ", final_response[i]);
+        fprintf(fp, "%d\n", final_response[i]);
     }
     printf("\n\n");
     fclose(fp);
-
-    // for (int i=0; i < CHALLENGE_SIZE; i++) {
-    //     registers[i] = challenge[i];
-    // }
-
-    // /* send challenge to slave */
-    // rc = modbus_write_registers(context, 0, MODBUS_MAX_WRITE_REGISTERS, registers);
-    // if (rc == -1) {
-    //     fprintf(stderr, "%s\n", modbus_strerror(errno));
-    //     return -1;
-    // }
-
-    // /* read response */
-    // rc = modbus_read_registers(context, 0, CHALLENGE_SIZE, registers);
-    // if (rc == -1) {
-    //     fprintf(stderr, "%s\n", modbus_strerror(errno));
-    //     return -1;
-    // }
-
-    // sprintf(challenge_name, "r%d", challenge_no);
-    // fp = fopen(challenge_name, "w+");
-    // for (int i=0; i < CHALLENGE_SIZE; i++) {
-    //     response[i] = registers[i];
-    //     printf("%ld ", response[i]);
-    //     fprintf(fp, "%d\n", response[i]);
-    // }
-
-    // printf("\n\n");
-    // fclose(fp);
     
     return 0;
 }
