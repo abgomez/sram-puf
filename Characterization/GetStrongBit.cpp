@@ -152,7 +152,7 @@ int readBit(uint16_t location) {
 
 void get_zeros() {
     bool write_ones = true;
-    long delay = 350000;
+    long delay = 390000;
     uint16_t current_goal = 0;
 
     while (true) {
@@ -180,15 +180,20 @@ void get_zeros() {
         printf("\n");
 
         int error = 0;
-        for (int i = 0; i < 1000; i++) {
-            if (readBit(strongest_zeros[i]) == 1) {
-                error++;
+        // for (int j = 0; j < 10; j++) {
+            for (int i = 0; i < zero; i++) {
+                if (readBit(strongest_zeros[i]) == 1) {
+                    error++;
+                }
             }
-        }
+        // }
         if (error == 0) {
             printf("Strongest Zeros Error: %d", error);
             printf("\n\n");
             break;
+        }
+        else {
+            printf("Strongest Zeros Error: %d\n", error);
         }
     }
 }
@@ -223,11 +228,13 @@ void get_ones() {
         printf("\n");
 
         int error = 0;
-        for (int i = 0; i < 1000; i++) {
-            if (readBit(strongest_ones[i]) == 0) {
-                error++;
+        // for (int j = 0; j < 10; j++) {
+            for (int i = 0; i < one; i++) {
+                if (readBit(strongest_ones[i]) == 0) {
+                    error++;
+                }
             }
-        }
+        // }
         if (error == 0) {
             printf("Strongest Ones Error: %d", error);
             printf("\n\n");
