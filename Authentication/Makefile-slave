@@ -1,0 +1,2 @@
+main: Slave.cpp
+	gcc -I. -I /usr/include/modbus Slave.cpp ../PUF/sram.cpp -o slave -L /usr/lib/modbus -l modbus -l bcm2835 -l crypto

@@ -1,0 +1,2 @@
+main: Master.cpp
+	gcc -o master Master.cpp -I /usr/include/modbus -L /usr/lib/modbus -l modbus -l crypto
