@@ -30,7 +30,7 @@ int strong_bit_count = 0;
 int readBit(uint16_t);
 int initialize();
 
-void get_resonse();
+void get_response();
 void get_challenge();
 void get_strong_bit();
 void format_response();

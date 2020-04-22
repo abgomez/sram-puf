@@ -31,6 +31,7 @@
 modbus_t *context;
 
 uint8_t *H;
+uint8_t *H1;
 uint8_t *r1;
 uint8_t *r2;
 uint8_t *bits;
@@ -40,7 +41,6 @@ uint8_t *slave_mode;
 
 uint16_t *c1;
 uint16_t *c2;
-
 
 uint16_t *raw_response;
 uint16_t *strong_bits;
@@ -114,6 +114,14 @@ int initialize() {
         return -1;
     }
     memset(H, 0, EVP_MAX_MD_SIZE * sizeof(uint8_t));
+
+    /* Allocate and initialize the memory to store H */
+    H1 = (uint8_t *) malloc(EVP_MAX_MD_SIZE * sizeof(uint8_t));
+    if (H1 == NULL) {
+        fprintf(stderr, "Failed to allocated memory");
+        return -1;
+    }
+    memset(H1, 0, EVP_MAX_MD_SIZE * sizeof(uint8_t));
 
     /* Allocate and initialize the memory to store H */
     r1_hash = (uint8_t *) malloc(EVP_MAX_MD_SIZE * sizeof(uint8_t));
@@ -361,6 +369,7 @@ int write_H(uint32_t hash_len) {
         fprintf(stderr, "%s\n", modbus_strerror(errno));
         return -1;
     }
+
     return 0;
 }
 
@@ -421,9 +430,16 @@ int write_ts(time_t ts) {
     uint32_t timestamp = (uint32_t) ts;
 
     memset(ts_array, 0, 2 * sizeof(uint16_t));
-    memcpy(&helper, &r1_hash, 4);
-    printf("%d\n", timestamp);
+    memcpy(&helper, r1_hash, 4);
+    // for (int i = 0; i < 32; i++) {
+    //     printf("%02x", r1_hash[i]);
+    // }
+    // printf("\n");
+    // printf("%d - %d\n", timestamp, helper);
     timestamp ^= helper;
+    // printf("%d\n", timestamp);
+    // timestamp ^= helper;
+    // printf("%d\n", timestamp);
     memcpy(ts_array, &timestamp, 4);
     
     rc = modbus_write_registers(context, 0, 2, ts_array);
@@ -432,6 +448,26 @@ int write_ts(time_t ts) {
         return -1;
     }
     
+    return 0;
+}
+
+int read_sensor() {
+    int rc = 0;
+
+    rc = modbus_read_registers(context, 0, 32, registers);
+    if (rc == -1) {
+        fprintf(stderr, "%s\n", modbus_strerror(errno));
+        return -1;
+    }
+
+    memcpy(H1, registers, 32*sizeof(uint8_t));
+
+    printf("H1: ");
+    for (int i = 0; i < 32; i++) {
+        printf("%02x", H1[i]);
+    }
+    printf("\n");
+
     return 0;
 }
 
@@ -601,9 +637,12 @@ int main(int argc, char **argv){
         exit(EXIT_FAILURE);
     }
 
-
-    
-    
+    /* read sensor data */
+    if (read_sensor() != 0) {
+        printf("Failed to read sensor\n");
+        exit(EXIT_FAILURE);
+    }
+   
     // get_file_response();
 
      /* Free the memory */

@@ -53,10 +53,21 @@ long initial_delay = 330000;
 long strongest_one_count = 0;
 long strongest_zero_count = 0;
 
-uint8_t H[HASH_LEN];
+
 uint8_t c2_hash[HASH_LEN];
 uint8_t buff[32];
 uint8_t bits[32 * MAX_PAGE];
+
+uint8_t H[HASH_LEN];
+// uint8_t hmac[HASH_LEN];
+uint8_t hash_r1[HASH_LEN];
+uint8_t hash_r2[HASH_LEN];
+uint8_t raw_r1[CHALLENGE_SIZE];
+uint8_t raw_r2[CHALLENGE_SIZE];
+uint8_t final_r1[CHALLENGE_SIZE/8];
+// uint8_t final_r2[CHALLENGE_SIZE/8];
+uint8_t *hmac;
+uint8_t *final_r2;
 
 uint16_t c1[CHALLENGE_SIZE];
 uint16_t c2[CHALLENGE_SIZE];
@@ -75,11 +86,72 @@ uint32_t timestamp = 0;
 /*
 * Functions Prototype 
 */
+int initialize();
+
 uint8_t get_mode();
 uint32_t get_sha256(uint8_t *, uint8_t *);
 uint32_t get_sha256(uint16_t *, uint8_t *); 
+
+void write_H();
 void write_timestamp();
 
+
+int initialize() {
+    /* Allocate and initialize the memory to store the modbus mapping */
+    modbus_mapping = modbus_mapping_new(MODBUS_MAX_READ_BITS, 0, MODBUS_MAX_READ_REGISTERS, 0);
+    if (modbus_mapping == NULL) {
+        fprintf(stderr, "Failed to allocate the mapping: %s\n", modbus_strerror(errno));
+        modbus_free(context);
+        return -1;
+    }
+
+    /* Allocate and initialize the memory to store final_r2 */
+    final_r2 = (uint8_t *) malloc((CHALLENGE_SIZE / 8) * sizeof(uint8_t));
+    if (final_r2 == NULL) {
+        fprintf(stderr, "Failed to allocated memory");
+        return -1;
+    }
+    memset(final_r2, 0, (CHALLENGE_SIZE / 8) * sizeof(uint8_t));
+
+    /* Allocate and initialize the memory to store hmac */
+    hmac = (uint8_t *) malloc(HASH_LEN* sizeof(uint8_t));
+    if (hmac == NULL) {
+        fprintf(stderr, "Failed to allocated memory");
+        return -1;
+    }
+    memset(hmac, 0, HASH_LEN * sizeof(uint8_t));
+
+    memset(c1, 0, sizeof(c1));
+    memset(c2, 0, sizeof(c2));
+    memset(raw_r1, 0, sizeof(raw_r1));
+    memset(raw_r2, 0, sizeof(raw_r2));
+    memset(hash_r1, 0, sizeof(hash_r1));
+    memset(hash_r2, 0, sizeof(hash_r2));
+    memset(final_r1, 0, sizeof(final_r1));
+    // memset(final_r2, 0, sizeof(final_r2));
+            // memset(response, 0, USHRT_MAX * sizeof(uint16_t));
+    // memset(strong_ones, 0, sizeof(strong_ones));
+    // memset(strong_zeros, 0, sizeof(strong_zeros));
+    // memset(strongest_ones, 0, sizeof(strongest_ones));
+    // memset(strongest_zeros, 0, sizeof(strongest_zeros));
+    // memset(strongest_ones_tmp, 0, sizeof(strongest_ones_tmp));
+    // memset(strongest_zeros_tmp, 0, sizeof(strongest_zeros_tmp));
+
+    return 0;
+}
+
+void reset() {
+    challenge_idx = response_idx = 0;
+    memset(final_r2, 0, (CHALLENGE_SIZE / 8) * sizeof(uint8_t));
+
+    memset(c1, 0, sizeof(c1));
+    memset(c2, 0, sizeof(c2));
+    memset(raw_r1, 0, sizeof(raw_r1));
+    memset(raw_r2, 0, sizeof(raw_r2));
+    memset(hash_r1, 0, sizeof(hash_r1));
+    memset(hash_r2, 0, sizeof(hash_r2));
+    memset(final_r1, 0, sizeof(final_r1));
+}
 
 uint32_t get_sha256(uint8_t *message, uint8_t *message_digest) {
     uint32_t hash_len = 0;
@@ -109,59 +181,6 @@ uint32_t get_sha256(uint16_t *message, uint8_t *message_digest) {
     return hash_len;
 }
 
-
-int initialize() {
-    /* Allocate and initialize the memory to store the modbus mapping */
-    modbus_mapping = modbus_mapping_new(MODBUS_MAX_READ_BITS, 0, MODBUS_MAX_READ_REGISTERS, 0);
-    if (modbus_mapping == NULL) {
-        fprintf(stderr, "Failed to allocate the mapping: %s\n", modbus_strerror(errno));
-        modbus_free(context);
-        return -1;
-    }
-
-    // /* Allocate and initialize the memory to store the challenge */
-    // challenge = (uint16_t *) malloc(USHRT_MAX * sizeof(uint16_t));
-    // if (challenge == NULL) {
-    //     fprintf(stderr, "Failed to allocated memory");
-    //     return -1;
-    // }
-    // memset(challenge, 0, USHRT_MAX * sizeof(uint16_t));
-
-    // /* Allocate and initialize the memory to store the challenge */
-    // response = (uint16_t *) malloc(USHRT_MAX * sizeof(uint16_t));
-    // if (response == NULL) {
-    //     fprintf(stderr, "Failed to allocated memory");
-    //     return -1;
-    // }
-    // memset(response, 0, USHRT_MAX * sizeof(uint16_t));
-
-    // /* Allocate and initialize the memory to store strong ones*/
-    // strong_ones = (uint16_t *) malloc(challenge_size * sizeof(uint16_t));
-    // if (challenge == NULL) {
-    //     fprintf(stderr, "Failed to allocated memory");
-    //     return -1;
-    // }
-    // memset(strong_ones, 0, challenge_size * sizeof(uint16_t));
-
-    //  /* Allocate and initialize the memory to store the challenge */
-    // strong_ones = (uint16_t *) malloc(50000 * sizeof(uint16_t));
-    // if (strong_ones == NULL) {
-    //     fprintf(stderr, "Failed to allocated memory");
-    //     return -1;
-    // }
-    // memset(strong_ones, 0, 50000 * sizeof(uint16_t));
-
-    memset(c1, 0, sizeof(c1));
-    // memset(strong_ones, 0, sizeof(strong_ones));
-    // memset(strong_zeros, 0, sizeof(strong_zeros));
-    // memset(strongest_ones, 0, sizeof(strongest_ones));
-    // memset(strongest_zeros, 0, sizeof(strongest_zeros));
-    // memset(strongest_ones_tmp, 0, sizeof(strongest_ones_tmp));
-    // memset(strongest_zeros_tmp, 0, sizeof(strongest_zeros_tmp));
-
-    return 0;
-}
-
 uint8_t get_mode() {
     uint8_t mode = 0;
 
@@ -181,272 +200,33 @@ uint8_t get_mode() {
     return mode;
 }
 
-// void write_pages(bool write_ones) {
-//     for (int page = 0; page < MAX_PAGE; page++) {
-//         sram.write_page(page, write_ones);
-//     }
-// }
-
-// void read_pages() {
-//     for (int page = 0; page < MAX_PAGE; page++) {
-//         sram.read_page(page, buff);
-//         memcpy(&bits[page*32], buff, sizeof(buff));
-//     }
-// }
-
-//data remanence algorithm to identify strong cells in the SRAM
-// int data_remanence(bool write_ones, long delay) {
-//     int strong_bit = 0;
-//     int bit_position = 0;
-
-//     sram.turn_on();
-//     write_pages(write_ones);
-//     sram.turn_off();
-    
-//     usleep(delay);
-
-//     sram.turn_on();
-//     read_pages();
-//     sram.turn_off();
-
-//     for (int i = 0; i < sizeof(bits); i++) {
-//         for (int j = 7; j >= 0; j--) {
-//             if ( write_ones == true ) {
-//                 if ( ( (bits[i] >> j) & 1 ) == 0 ) {
-//                     strong_zeros[strong_bit] = bit_position;
-//                     strong_bit++;
-//                 }
-//             }
-//             else {
-//                 if ( ( (bits[i] >> j) & 1 ) == 1 ) {
-//                     strong_ones[strong_bit] = bit_position;
-//                     strong_bit++;
-//                 }
-//             }
-//             bit_position++;
-//         }
-//         if (bit_position >= USHRT_MAX) {
-//             break;
-//         }
-//     }
-//     return strong_bit;
-// }
-
-// int get_strong_bit_by_goal(bool write_ones) {
-//     int current_goal = 0;
-//     long current_delay = initial_delay;
-
-//     while (current_goal < CHALLENGE_SIZE) {
-//         current_goal = data_remanence(write_ones, current_delay);
-//         printf("DATA REMANENCE: %d delay: %ld\n", current_goal, current_delay);
-
-//         if (current_goal < CHALLENGE_SIZE) {
-//             current_delay += step_delay;
-//         }
-//     }
-//     return current_goal;
-// }
-
-// int readBit(uint16_t location) {
-//     uint8_t recv_data = 0x00;
-//     long loc = 0;
-    
-//     loc = floor(location / 8);
-//     sram.turn_on();
-//     recv_data = sram.read_byte(loc);
-//     sram.turn_off();
-
-//     return recv_data >> (7 - (location % 8)) & 1;
-// }
-
-int readBit(long location) {
-    uint8_t recv_data = 0x00;
-    // printf("%d ", location);
-    // printf("%d ", floor(location / 8));
-
-    sram.turn_on();
-    recv_data = sram.read_byte(floor(location / 8));
-    sram.turn_off();
-    printf("%d ", recv_data >> (7 - (location % 8)) & 1);
-    
-    return recv_data >> (7 - (location % 8)) & 1;
-}
-
-// void get_strongest_one() {
-//     FILE *fp;
-//     int count;
-
-//     printf("Strong ones: %d\n", ones_count);
-//     count, strongest_one_count = 0;
-//     for (int i=0; i < ones_count; i++) {
-//         if ( readBit(strong_ones[i]) == 0) {
-//             count++;
-//         }
-//         else {
-//             strongest_ones_tmp[strongest_one_count] = strong_ones[i];
-//             strongest_one_count++;
-//         }
-//     }
-//     printf("Strong ones error: %d\n", count);
-
-//     printf("Strongest ones: %d\n", strongest_one_count);
-//     count = 0;
-//     for (int i=0; i < strongest_one_count; i++) {
-//         if ( readBit(strongest_ones_tmp[i]) == 0) {
-//             count++;
-//         }
-//         else {
-//             strongest_ones[i] = strongest_ones_tmp[i];
-//         }
-//     }
-//     printf("Strongest ones error: %d\n", count);
-// }
-
-// void get_strongest_zero() {
-//     int count;
-//     strongest_zero_count = 0;
-
-//     printf("Strong zeros: %d\n", zeros_count);
-//     for (int i=0; i < zeros_count; i++) {
-//         if ( readBit(strong_zeros[i]) == 1) {
-//             count++;
-//         }
-//         else {
-//             strongest_zeros_tmp[strongest_zero_count] = strong_zeros[i];
-//             strongest_zero_count++;
-//         }
-//     }
-//     printf("Strong zeros error: %d\n", count);
-
-//     printf("Strongest zeros: %d\n", strongest_zero_count);
-//     count = 0;
-//     for (int i=0; i < strongest_zero_count; i++) {
-//         if ( readBit(strongest_zeros[i]) == 1) {
-//             count++;
-//         }
-//         else {
-//             strongest_zeros[i] = strongest_zeros_tmp[i];
-//         }
-//     }
-//     printf("Strongest zeros error: %d\n", count);
-// }
-
-// void swap(uint16_t *a, uint16_t *b) {
-//     uint16_t temp = *a;
-//     *a = *b;
-//     *b = temp;
-// }
-
-// void randomize(int n) {
-//     srand(time(NULL));
-//     for (int i = 0; i < n; i++) {
-//         int j = rand() % n;
-//         swap(&challenge[i], &challenge[j]);
-//     }
-// }
-
-// void createChallenge() {
-//     int challenge_count = strongest_one_count + strongest_zero_count;
-    
-//     memset(challenge, 0, sizeof(challenge));
-
-//     printf("Challenge bits: %d\n", challenge_count);
-
-//     memcpy(challenge, strongest_ones, strongest_one_count*sizeof(uint16_t));
-//     memcpy(&challenge[strongest_one_count], strongest_zeros, strongest_zero_count*sizeof(uint16_t));
-
-//     // for (int i = 0; i < strongest_one_count; i++) {
-//     //     printf("%d ", strongest_ones[i]);
-//     // }
-//     // printf("\n\n");
-
-//     // for (int i = 0; i < challenge_count; i++) {
-//     //     printf("%d ", challenge[i]);
-//     // }
-//     // printf("\n\n");
-
-//     randomize(challenge_count);
-//     // printf("\n\n");
-//     // for (int i = 0; i < CHALLENGE_SIZE; i++) {
-//     //     printf("%d ", challenge[i]);
-//     // }
-
-//     // printf("\n");
-// }
-
-
-// void getChallenge() {
-//     bool write_ones;
-
-//     memset(strong_ones, 0, sizeof(strong_ones));
-//     memset(strong_zeros, 0, sizeof(strong_zeros));
-//     memset(strongest_ones, 0, sizeof(strongest_ones));
-//     memset(strongest_zeros, 0, sizeof(strongest_zeros));
-//     memset(strongest_ones_tmp, 0, sizeof(strongest_ones_tmp));
-//     memset(strongest_zeros_tmp, 0, sizeof(strongest_zeros_tmp));
-
-//     // get strong bits
-//     write_ones = false;
-//     ones_count = get_strong_bit_by_goal(write_ones);
-//     write_ones = true;
-//     zeros_count = get_strong_bit_by_goal(write_ones);
-
-//     // get strongest bits
-//     get_strongest_one();
-//     get_strongest_zero();
-
-//     createChallenge();
-
+// void get_response() {
 //     for (int i = 0; i < MODBUS_MAX_READ_REGISTERS; i++) {
-//         modbus_mapping->tab_registers[i] = challenge[i];
-//         printf("%ld ", challenge[i]);
+//         int j = response_idx * MODBUS_MAX_READ_REGISTERS + i;
+//         if (j > CHALLENGE_SIZE) {
+//             response[j] = 0;
+//         }
+//         else {
+//             response[j] = readBit(challenge[j]);
+//         }
+//         modbus_mapping->tab_registers[i] = response[j];
 //     }
-//     printf("\n\n");
-
-//     // for (int i = 0; i < CHALLENGE_SIZE; i++) {
-//     //     printf("%ld ", strongest_zeros[i]);
-//     // }
-//     // printf("\n");
-// }
-
-// void getResponse() {
-//     memset(response, 0, sizeof(response));
-//     for (int i=0; i < MODBUS_MAX_WRITE_REGISTERS; i++) {
-//         // challenge[i] = modbus_mapping->tab_registers[i];
-//         response[i] = readBit(modbus_mapping->tab_registers[i]);
-//         modbus_mapping->tab_registers[i] = response[i];
-//         printf("%d ", response[i]);
-//     }
-//     printf("\n\n");
-// }
-
-void get_response() {
-    for (int i = 0; i < MODBUS_MAX_READ_REGISTERS; i++) {
-        int j = response_idx * MODBUS_MAX_READ_REGISTERS + i;
-        if (j > CHALLENGE_SIZE) {
-            response[j] = 0;
-        }
-        else {
-            response[j] = readBit(challenge[j]);
-        }
-        modbus_mapping->tab_registers[i] = response[j];
-    }
     
-    // for (int i = 0 ; i < MODBUS_MAX_WRITE_REGISTERS; i++) {
-    //     // printf("%d ", readBit(challenge[i]));
-    //     modbus_mapping->tab_registers[i] = readBit(challenge[i]);
-    //     usleep(330000);
-    // }
-    for (int i = 0; i < CHALLENGE_SIZE; i++) {
-        printf("%d ", modbus_mapping->tab_registers[i]);
-    }
-    printf("\n\n");
+//     // for (int i = 0 ; i < MODBUS_MAX_WRITE_REGISTERS; i++) {
+//     //     // printf("%d ", readBit(challenge[i]));
+//     //     modbus_mapping->tab_registers[i] = readBit(challenge[i]);
+//     //     usleep(330000);
+//     // }
+//     for (int i = 0; i < CHALLENGE_SIZE; i++) {
+//         printf("%d ", modbus_mapping->tab_registers[i]);
+//     }
+//     printf("\n\n");
 
-    response_idx++;
+//     response_idx++;
 
-}
+// }
 
-void get_H() {
+void write_H() {
     memcpy(H, modbus_mapping->tab_registers, HASH_LEN * sizeof(uint8_t));
     for (int i = 0; i < HASH_LEN; i++) {
         printf("%02x", H[i]);
@@ -482,12 +262,11 @@ void write_timestamp() {
     printf("%d\n", timestamp);
 }
 
-
 void write_register() {
     uint8_t mode = 0;
     mode = get_mode();
     if (mode == 0) {
-        get_H();
+        write_H();
     }
     else if (mode == 1) {
         printf("Writting C1...\n");
@@ -506,7 +285,155 @@ void write_register() {
         printf("Writting timestamp..\n");
         write_timestamp();
     }
+}
 
+void format_response(uint8_t *raw_response, uint8_t *final_response) {
+    int a = 0;
+    int b = 0;
+    uint8_t tmp_key;
+
+    for (int i = 0; i < CHALLENGE_SIZE/8; i++) {
+        tmp_key = 0;
+        for (int j = 0; j < 7; j++) {
+            switch (j) {
+                case 0:
+                    if (raw_response[a+j] == 1) {
+                        tmp_key += 128;
+                    }
+                    break;
+                case 1:
+                    if (raw_response[a+j] == 1) {
+                        tmp_key += 64;
+                    }
+                    break;
+                case 2:
+                    if (raw_response[a+j] == 1) {
+                        tmp_key += 32;
+                    }
+                    break;
+                case 3:
+                    if (raw_response[a+j] == 1) {
+                        tmp_key += 16;
+                    }
+                    break;
+                case 4:
+                    if (raw_response[a+j] == 1) {
+                        tmp_key += 8;
+                    }
+                    break;
+                case 5:
+                    if (raw_response[a+j] == 1) {
+                        tmp_key += 4;
+                    }
+                    break;
+                case 6:
+                    if (raw_r1[a+j] == 1) {
+                        tmp_key += 2;
+                    }
+                    break;
+                case 7:
+                    if (raw_response[a+j] == 1) {
+                        tmp_key++;
+                    }
+                    break;
+            }
+        }
+        final_response[i] = tmp_key;
+        a +=8;
+    }
+}
+
+int readBit(uint16_t location) {
+    uint8_t recv_data = 0x00;
+    long loc = 0;
+    loc = floor(location / 8);
+    sram.turn_on();
+    recv_data = sram.read_byte(loc);
+    sram.turn_off();
+    return recv_data >> (7 - (location % 8)) & 1;
+}
+
+void get_response(uint8_t *raw_response, uint16_t *challenge) {
+    for (int i = 0; i < CHALLENGE_SIZE; i++) {
+        raw_response[i] = readBit(challenge[i]);
+        printf("%d ", raw_response[i]);
+    }
+    printf("\n");
+}
+
+void get_c2() {
+    int hash_index = 0;
+    uint16_t helper = 0;
+    uint16_t location = 0;
+
+    for (int i = 0; i < CHALLENGE_SIZE; i++) {
+        location = c2[i];
+        if (hash_index == HASH_LEN) {
+            hash_index = 0;
+        }
+        memcpy(&helper, &hash_r1[hash_index], 2);
+        location ^= helper;
+        c2[i] = location;
+        hash_index += 2;
+    }
+}
+
+void get_temperature() {
+    uint8_t *temperature = (uint8_t *) "22";
+    // unsigned char* key = (unsigned char*)  "100011011011001111110000101000011001010101010101000011111001110";
+    // unsigned char* hmac;
+    // sprintf(temperature, "%d", 22);
+    hmac = HMAC(EVP_sha256(), final_r2, 32, temperature, 2, NULL, NULL);
+    printf("size of %d\n", sizeof(temperature));
+
+    for (int i = 0; i < HASH_LEN; i++) {
+        printf("%02x", hmac[i]);
+    }
+    printf("\n");
+
+
+}
+
+void write_response() {
+    uint8_t tmp_h[(CHALLENGE_SIZE/8)*2+4];
+
+    memcpy(tmp_h, final_r1, (CHALLENGE_SIZE / 8) * sizeof(uint8_t));
+    memcpy(tmp_h + (CHALLENGE_SIZE / 8), final_r2, (CHALLENGE_SIZE / 8) * sizeof(uint8_t));
+    memcpy(tmp_h + (CHALLENGE_SIZE / 8) * 2, &timestamp, 4);
+
+    get_sha256(tmp_h, H);
+
+    memcpy(modbus_mapping->tab_registers, H, HASH_LEN*sizeof(uint8_t));
+}
+
+void read_sensor() {
+    uint32_t helper;
+
+    /* generate R1 from C1 */
+    get_response(raw_r1, c1);
+    format_response(raw_r1, final_r1);
+    printf("\n");
+    /* get sha256 of R1 */
+    get_sha256(final_r1, hash_r1);
+    /* get C2 from C2' and hash(R1) */
+    get_c2();
+    /* generate R2 from C2 */
+    get_response(raw_r2, c2);
+    format_response(raw_r2, final_r2);
+    /* get TS from TS' */
+    // for (int i = 0; i < 32; i++) {
+    //     printf("%02x", hash_r1[i]);
+    // }
+    // printf("\n");
+    memcpy(&helper, hash_r1, 4);
+    // printf("%d - %d\n", timestamp, helper);
+    timestamp ^= helper;
+    // printf("%d\n", timestamp);
+
+    /* read temperature from sensor */
+    get_temperature();
+    /* send reading to the RTU */
+    write_response();
 }
 
 int main(int argc, char **argv){
@@ -522,18 +449,7 @@ int main(int argc, char **argv){
     modbus_tcp_accept(context, &socket);
 	printf("Connection started!\n");
 
-    // /* Allocate and initialize the memory to store the modbus mapping */
-    // modbus_mapping = modbus_mapping_new(MODBUS_MAX_READ_BITS, 0, MODBUS_MAX_READ_REGISTERS, 0);
-    // if (modbus_mapping == NULL) {
-    //     fprintf(stderr, "Failed to allocate the mapping: %s\n", modbus_strerror(errno));
-    //     modbus_free(context);
-    //     return -1;
-    // }
-
-    if (initialize() != 0) {
-        printf("Failed to allocated memory");
-        exit(EXIT_FAILURE);
-    }
+    initialize();
 
     for(;;) {
         uint8_t query[MODBUS_TCP_MAX_ADU_LENGTH];
@@ -545,62 +461,23 @@ int main(int argc, char **argv){
         if (rc >= 0) {
             printf("Replying to request: 0x%02X ", function_code);
             if (function_code == 0x03) {
-                get_response();
+                read_sensor();
             }
-            // switch (function_code) {
-            //     case 0x0F:
-            //         printf("(Set Mode)\n");
-            //         break;
-            //     case 0x06:
-            //         printf("(Set Challenge Size)\n");    
-            //         break;
-            //     case 0x10:
-            //         printf("(Write Register)\n");
-            //         break;
-            //     case 0x3:
-            //         printf("(Read Register)\n");
-            //         mode = getMode();
-            //         printf("Working on mode: %d\n", mode);
-            //         if (mode == 2) { //write challenge
-            //             getChallenge();
-            //         }
-            //         else if (mode == 4) { //write response
-            //             getResponse();
-            //         }
-            //         break;
-            // }
             modbus_reply(context, query, rc, modbus_mapping);
             if (function_code == 0x0F) {
                 printf("(Set Mode)\n");
                 challenge_idx = 0;
             }
             else if (function_code == 0x10) {
-                // write_challenge();
                 write_register();
             }
-            // switch(function_code) {
-            //     case 0x0F:
-            //         printf("(Set Mode)\n");
-            //         break;
-            //     case 0x10:
-            //         write_challenge();
-            //         break;
-            // }
-            // if (function_code == 0x06) {
-            //     challenge_size = modbus_mapping->tab_registers[0];
-            //     printf("Challenge size: %ld\n", challenge_size);
-            // }
         } else if (rc == -1) {
             /* Connection closed by the client or server */
             modbus_close(context); // close
             // // immediately start waiting for another request again
             printf("\n\nWaiting for connection...\n");
-            // sram.turn_off();
-            challenge_idx = response_idx = 0;
-            memset(c1, 0, USHRT_MAX * sizeof(uint16_t));
-            memset(response, 0, USHRT_MAX * sizeof(uint16_t));
+            reset();
             modbus_tcp_accept(context, &socket);
-            // break;
         }
     }
 
