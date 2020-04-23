@@ -24,20 +24,24 @@
 #define WRITE_C1 0b0001
 #define WRITE_C2 0b0010
 #define WRITE_TS 0b0011
-#define FINISH_CHALLENGE 0b0011
-#define WRITE_RESPONSE 0b0100
+#define READ_H1  0b0100
+#define READ_MAC 0b0101
+#define READ_DAT 0b0110
 
 
 modbus_t *context;
 
 uint8_t *H;
 uint8_t *H1;
+uint8_t *h2;
 uint8_t *r1;
 uint8_t *r2;
+uint8_t *hmac;
 uint8_t *bits;
 uint8_t *r1_hash;
 uint8_t *c2_hash;
 uint8_t *slave_mode;
+uint8_t temperature = 0;
 
 uint16_t *c1;
 uint16_t *c2;
@@ -68,12 +72,10 @@ void get_strong_bit();
 void swap(uint16_t *, uint16_t *);
 
 
-
-
 int initialize() {
     /* Set response timeout*/
     modbus_set_byte_timeout(context, 0, 0);
-    modbus_set_response_timeout(context, 120, 0);
+    modbus_set_response_timeout(context, 440, 0);
 
     /* Allocate and initialize the memory to store the status */
     bits = (uint8_t *) malloc(MODBUS_MAX_READ_BITS * sizeof(uint8_t));
@@ -114,6 +116,22 @@ int initialize() {
         return -1;
     }
     memset(H, 0, EVP_MAX_MD_SIZE * sizeof(uint8_t));
+
+    /* Allocate and initialize the memory to store hmac */
+    hmac = (uint8_t *) malloc(EVP_MAX_MD_SIZE * sizeof(uint8_t));
+    if (hmac == NULL) {
+        fprintf(stderr, "Failed to allocated memory");
+        return -1;
+    }
+    memset(hmac, 0, EVP_MAX_MD_SIZE * sizeof(uint8_t));
+
+    /* Allocate and initialize the memory to store hmac */
+    h2 = (uint8_t *) malloc(EVP_MAX_MD_SIZE * sizeof(uint8_t));
+    if (h2 == NULL) {
+        fprintf(stderr, "Failed to allocated memory");
+        return -1;
+    }
+    memset(h2, 0, EVP_MAX_MD_SIZE * sizeof(uint8_t));
 
     /* Allocate and initialize the memory to store H */
     H1 = (uint8_t *) malloc(EVP_MAX_MD_SIZE * sizeof(uint8_t));
@@ -260,6 +278,39 @@ int setMode(int mode) {
                 return -1;
             }
             break;
+        case READ_H1:
+            slave_mode[0] = 0;
+            slave_mode[1] = 1;
+            slave_mode[2] = 0;
+            slave_mode[3] = 0;
+            rc = modbus_write_bits(context, 0, 4, slave_mode);
+            if (rc == -1) {
+                fprintf(stderr, "%s\n", modbus_strerror(errno));
+                return -1;
+            }
+            break;
+        case READ_MAC:
+            slave_mode[0] = 0;
+            slave_mode[1] = 1;
+            slave_mode[2] = 0;
+            slave_mode[3] = 1;
+            rc = modbus_write_bits(context, 0, 4, slave_mode);
+            if (rc == -1) {
+                fprintf(stderr, "%s\n", modbus_strerror(errno));
+                return -1;
+            }
+            break;
+        case READ_DAT:
+            slave_mode[0] = 0;
+            slave_mode[1] = 1;
+            slave_mode[2] = 1;
+            slave_mode[3] = 0;
+            rc = modbus_write_bits(context, 0, 4, slave_mode);
+            if (rc == -1) {
+                fprintf(stderr, "%s\n", modbus_strerror(errno));
+                return -1;
+            }
+            break;
         default:
             printf("Incorrect Mode\n");
             return -1;
@@ -350,11 +401,11 @@ uint32_t get_H(time_t ts) {
 
     hash_len = get_sha256(tmp_h, H);
 
-    printf("H: ");
-    for (int i = 0; i < hash_len; i++) {
-        printf("%02x", H[i]);
-    }
-    printf("\n");
+    // printf("H: ");
+    // for (int i = 0; i < hash_len; i++) {
+    //     printf("%02x", H[i]);
+    // }
+    // printf("\n");
 
     return hash_len;
 }
@@ -451,25 +502,84 @@ int write_ts(time_t ts) {
     return 0;
 }
 
-int read_sensor() {
+/*
+* Function to read H1 generated in the slave
+* this proves the identity of the slave.
+*/
+int read_h1(uint32_t hash_len) {
     int rc = 0;
 
-    rc = modbus_read_registers(context, 0, 32, registers);
+    rc = modbus_read_registers(context, 0, hash_len, registers);
     if (rc == -1) {
         fprintf(stderr, "%s\n", modbus_strerror(errno));
         return -1;
     }
 
-    memcpy(H1, registers, 32*sizeof(uint8_t));
+    memcpy(H1, registers, hash_len*sizeof(uint8_t));
 
-    printf("H1: ");
-    for (int i = 0; i < 32; i++) {
-        printf("%02x", H1[i]);
+    if (memcmp(H, H1, hash_len) == 0 ) {
+        printf("Sensor's Identity verified..\n" );
+        return 0;
     }
-    printf("\n");
 
+    // printf("H1: ");
+    // for (int i = 0; i < 32; i++) {
+    //     printf("%02x", H1[i]);
+    // }
+
+    return -1;
+}
+
+int read_sensor() {
+    int rc = 0;
+
+    rc = modbus_read_registers(context, 0, 1, registers);
+    if (rc == -1) {
+        fprintf(stderr, "%s\n", modbus_strerror(errno));
+        return -1;
+    }
+
+    memcpy(&temperature, registers, sizeof(uint8_t));
+
+    printf("Temperature read from sensor: %d\n", temperature);
     return 0;
 }
+
+int read_hmac(uint32_t hash_len) {
+    int rc = 0;
+
+    rc = modbus_read_registers(context, 0, hash_len, registers);
+    if (rc == -1) {
+        fprintf(stderr, "%s\n", modbus_strerror(errno));
+        return -1;
+    }
+
+    memcpy(hmac, registers, hash_len*sizeof(uint8_t));
+    for (int i = 0; i < 32; i++) {
+            printf("%d ", r2[i]);
+        }
+        printf("\n");
+
+    h2 = HMAC(EVP_sha256(), r2, hash_len, &temperature, 1, NULL, NULL);
+
+    if (memcmp(hmac, h2, hash_len) == 0 ) {
+        printf("Data Integrity verified..\n" );
+        return 0;
+    }
+
+    // printf("h2: ");
+    // for (int i = 0; i < 32; i++) {
+    //     printf("%02x", hmac[i]);
+    // }
+    // printf("\nh1: ");
+    // for (int i = 0; i < 32; i++) {
+    //     printf("%02x", h2[i]);
+    // }
+
+    return -1;
+}
+
+
 
 
 // int get_resonse() {
@@ -563,6 +673,11 @@ int main(int argc, char **argv){
         printf("Failed to get challenge\n");
         exit(EXIT_FAILURE);
     }
+    // get_sha256(c2, c2_hash);
+    for (int i = 0; i < 256; i++) {
+        printf("%d ", c2[i]);
+    }
+    printf("\n");
     if (get_response() != 0) {
         printf("Failed to get response\n");
         exit(EXIT_FAILURE);
@@ -607,11 +722,6 @@ int main(int argc, char **argv){
 
     hash_len = get_sha256(r1, r1_hash);
     get_C2(hash_len);
-    get_sha256(c2, c2_hash);
-    for (int i = 0; i < hash_len; i++) {
-        printf("%02x", c2_hash[i]);
-    }
-    printf("\n");
 
     /* Set slave mode */
     if (setMode(WRITE_C2) != 0) {
@@ -637,13 +747,44 @@ int main(int argc, char **argv){
         exit(EXIT_FAILURE);
     }
 
+    printf("Reading sensor...\n");
+
+    /* Set slave mode */
+    if (setMode(READ_H1) != 0) {
+        printf("Failed to set slave mode\n");
+        exit(EXIT_FAILURE);
+    }
+
+    /* read h1 */
+    if (read_h1(hash_len) != 0) {
+        printf("Failed to verified sensor's identity\n");
+        exit(EXIT_FAILURE);
+    }
+
+    /* Set slave mode */
+    if (setMode(READ_DAT) != 0) {
+        printf("Failed to set slave mode\n");
+        exit(EXIT_FAILURE);
+    }
+
     /* read sensor data */
     if (read_sensor() != 0) {
         printf("Failed to read sensor\n");
         exit(EXIT_FAILURE);
     }
+    
+    /* Set slave mode */
+    if (setMode(READ_MAC) != 0) {
+        printf("Failed to set slave mode\n");
+        exit(EXIT_FAILURE);
+    }
+
+    /* read sensor data */
+    if (read_hmac(hash_len) != 0) {
+        printf("Failed to verified data integrity\n");
+        exit(EXIT_FAILURE);
+    }
    
-    // get_file_response();
 
      /* Free the memory */
     free(bits);

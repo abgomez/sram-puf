@@ -30,6 +30,8 @@
 #define MODBUS_PORT 1502
 #define CHALLENGE_SIZE 256
 #define HASH_LEN 32
+#define MAXTIMINGS	85
+#define DHTPIN		RPI_GPIO_P1_07
 
 
 SRAM sram;
@@ -57,8 +59,9 @@ long strongest_zero_count = 0;
 uint8_t c2_hash[HASH_LEN];
 uint8_t buff[32];
 uint8_t bits[32 * MAX_PAGE];
+uint8_t temperature = 0;
 
-uint8_t H[HASH_LEN];
+uint8_t h[HASH_LEN];
 // uint8_t hmac[HASH_LEN];
 uint8_t hash_r1[HASH_LEN];
 uint8_t hash_r2[HASH_LEN];
@@ -227,9 +230,9 @@ uint8_t get_mode() {
 // }
 
 void write_H() {
-    memcpy(H, modbus_mapping->tab_registers, HASH_LEN * sizeof(uint8_t));
+    memcpy(h, modbus_mapping->tab_registers, HASH_LEN * sizeof(uint8_t));
     for (int i = 0; i < HASH_LEN; i++) {
-        printf("%02x", H[i]);
+        printf("%02x", h[i]);
     }
     printf("\n");
 }
@@ -259,7 +262,7 @@ void write_challenge(uint16_t *challenge) {
 
 void write_timestamp() {
     memcpy(&timestamp, modbus_mapping->tab_registers, 2 * sizeof(uint16_t));
-    printf("%d\n", timestamp);
+    // printf("%d\n", timestamp);
 }
 
 void write_register() {
@@ -269,20 +272,15 @@ void write_register() {
         write_H();
     }
     else if (mode == 1) {
-        printf("Writting C1...\n");
+        printf("Reading C1...\n");
         write_challenge(c1);
     }
     else if (mode == 2) {
-        printf("Writting C2..\n");
+        printf("Reading C2..\n");
         write_challenge(c2);
-        get_sha256(c2, c2_hash);
-        // for (int i = 0; i < 32; i++) {
-        //     printf("%02x", c2_hash[i]);
-        // }
-        // printf("\n");
     }
     else if (mode == 3) {
-        printf("Writting timestamp..\n");
+        printf("Reading timestamp..\n");
         write_timestamp();
     }
 }
@@ -327,7 +325,7 @@ void format_response(uint8_t *raw_response, uint8_t *final_response) {
                     }
                     break;
                 case 6:
-                    if (raw_r1[a+j] == 1) {
+                    if (raw_response[a+j] == 1) {
                         tmp_key += 2;
                     }
                     break;
@@ -342,6 +340,10 @@ void format_response(uint8_t *raw_response, uint8_t *final_response) {
         a +=8;
     }
 }
+
+/*
+* Function to read the bit value of a cell 
+*/
 
 int readBit(uint16_t location) {
     uint8_t recv_data = 0x00;
@@ -378,21 +380,6 @@ void get_c2() {
     }
 }
 
-void get_temperature() {
-    uint8_t *temperature = (uint8_t *) "22";
-    // unsigned char* key = (unsigned char*)  "100011011011001111110000101000011001010101010101000011111001110";
-    // unsigned char* hmac;
-    // sprintf(temperature, "%d", 22);
-    hmac = HMAC(EVP_sha256(), final_r2, 32, temperature, 2, NULL, NULL);
-    printf("size of %d\n", sizeof(temperature));
-
-    for (int i = 0; i < HASH_LEN; i++) {
-        printf("%02x", hmac[i]);
-    }
-    printf("\n");
-
-
-}
 
 void write_response() {
     uint8_t tmp_h[(CHALLENGE_SIZE/8)*2+4];
@@ -401,9 +388,10 @@ void write_response() {
     memcpy(tmp_h + (CHALLENGE_SIZE / 8), final_r2, (CHALLENGE_SIZE / 8) * sizeof(uint8_t));
     memcpy(tmp_h + (CHALLENGE_SIZE / 8) * 2, &timestamp, 4);
 
-    get_sha256(tmp_h, H);
+    get_sha256(tmp_h, h);
 
-    memcpy(modbus_mapping->tab_registers, H, HASH_LEN*sizeof(uint8_t));
+    memcpy(modbus_mapping->tab_registers, h, HASH_LEN*sizeof(uint8_t));
+    memcpy(&modbus_mapping->tab_registers[HASH_LEN*sizeof(uint8_t)], hmac, HASH_LEN*sizeof(uint8_t));
 }
 
 void read_sensor() {
@@ -417,6 +405,7 @@ void read_sensor() {
     get_sha256(final_r1, hash_r1);
     /* get C2 from C2' and hash(R1) */
     get_c2();
+    
     /* generate R2 from C2 */
     get_response(raw_r2, c2);
     format_response(raw_r2, final_r2);
@@ -431,9 +420,142 @@ void read_sensor() {
     // printf("%d\n", timestamp);
 
     /* read temperature from sensor */
-    get_temperature();
+    // get_temperature();
     /* send reading to the RTU */
     write_response();
+}
+
+void send_h() {
+    uint32_t helper;
+    uint8_t tmp_h[(CHALLENGE_SIZE/8)*2+4];
+
+    /* generate R1 from C1 */
+    get_response(raw_r1, c1);
+    format_response(raw_r1, final_r1);
+    printf("\n");
+    /* get sha256 of R1 */
+    get_sha256(final_r1, hash_r1);
+    /* get C2 from C2' and hash(R1) */
+    get_c2();
+    // get_sha256(c2, c2_hash);
+    for (int i = 0; i < 256; i++) {
+        printf("%d ", c2[i]);
+    }
+    printf("\n");
+    /* generate R2 from C2 */
+    get_response(raw_r2, c2);
+    format_response(raw_r2, final_r2);
+    /* get TS from TS' */
+    memcpy(&helper, hash_r1, 4);
+    timestamp ^= helper;
+
+    memcpy(tmp_h, final_r1, (CHALLENGE_SIZE / 8) * sizeof(uint8_t));
+    memcpy(tmp_h + (CHALLENGE_SIZE / 8), final_r2, (CHALLENGE_SIZE / 8) * sizeof(uint8_t));
+    memcpy(tmp_h + (CHALLENGE_SIZE / 8) * 2, &timestamp, 4);
+
+    get_sha256(tmp_h, h);
+
+    memcpy(modbus_mapping->tab_registers, h, HASH_LEN*sizeof(uint8_t));
+}
+
+uint8_t read_dht11() {
+    int dht11_dat[5] = { 0, 0, 0, 0, 0 };
+	uint8_t laststate	= HIGH;
+	uint8_t counter		= 0;
+	uint8_t j		= 0, i;
+	float	f; 
+
+    if (!bcm2835_init()) {
+        printf("bcm2835_init failed. Are you running as root??\n");
+        exit(1);
+    }
+
+	bcm2835_gpio_fsel(DHTPIN, BCM2835_GPIO_FSEL_OUTP);
+	bcm2835_gpio_write(DHTPIN, LOW);
+	delay( 18 );
+	bcm2835_gpio_write(DHTPIN, HIGH);
+	delayMicroseconds( 40 );
+	bcm2835_gpio_fsel(DHTPIN, BCM2835_GPIO_FSEL_INPT);
+ 
+	for ( i = 0; i < MAXTIMINGS; i++ ) {
+		counter = 0;
+		
+		while ( bcm2835_gpio_lev(DHTPIN) == laststate ) {
+			counter++;
+			delayMicroseconds( 1 );
+			if ( counter == 255 ) {
+				break;
+			}
+		}
+		laststate = bcm2835_gpio_lev( DHTPIN );
+ 
+		if ( counter == 255 ) {
+            break;
+        }
+ 
+		if ( (i >= 4) && (i % 2 == 0) ) {
+			dht11_dat[j / 8] <<= 1;
+			if ( counter > 50 ) {
+                dht11_dat[j / 8] |= 1;
+            }
+			j++;
+		}
+	}
+ 
+	if ( (j >= 40) && (dht11_dat[4] == ( (dht11_dat[0] + dht11_dat[1] + dht11_dat[2] + dht11_dat[3]) & 0xFF) ) ) {
+        return (uint8_t) dht11_dat[2];
+	} else  {
+		return (uint8_t) 0;
+	}
+}
+
+// void get_temperature() {
+//     uint8_t temperature = 0;
+
+//     while (temperature == 0) {
+//         temperature = read_dht11();
+//     }
+//     hmac = HMAC(EVP_sha256(), final_r2, 32, &temperature, 1, NULL, NULL);
+
+//     for (int i = 0; i < HASH_LEN; i++) {
+//         printf("%02x", hmac[i]);
+//     }
+//     printf("\n");
+// }
+
+
+void send_sensor_read() {
+    while (temperature == 0) {
+        temperature = read_dht11();
+    }
+
+    printf("temp: %d\n", temperature);
+    memcpy(modbus_mapping->tab_registers, &temperature, sizeof(uint8_t));
+}
+
+void read_register() {
+    uint8_t mode = 0;
+
+    mode = get_mode();
+
+    if (mode == 4) {
+        printf("Writting H...\n");
+        send_h();
+    }
+    else if (mode == 5) {
+        printf("Writting HMAC..\n");
+        for (int i = 0; i < 32; i++) {
+            printf("%d ", final_r2[i]);
+        }
+        printf("\n");
+        hmac = HMAC(EVP_sha256(), final_r2, HASH_LEN, &temperature, 1, NULL, NULL);
+        memcpy(modbus_mapping->tab_registers, hmac, HASH_LEN*sizeof(uint8_t));
+        // send_hmac(c2);
+    }
+    else if (mode == 6) {
+        printf("Writting sensor data..\n");
+        send_sensor_read();
+    }
 }
 
 int main(int argc, char **argv){
@@ -461,7 +583,7 @@ int main(int argc, char **argv){
         if (rc >= 0) {
             printf("Replying to request: 0x%02X ", function_code);
             if (function_code == 0x03) {
-                read_sensor();
+                read_register();
             }
             modbus_reply(context, query, rc, modbus_mapping);
             if (function_code == 0x0F) {
