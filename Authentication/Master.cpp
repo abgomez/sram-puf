@@ -555,10 +555,10 @@ int read_hmac(uint32_t hash_len) {
     }
 
     memcpy(hmac, registers, hash_len*sizeof(uint8_t));
-    for (int i = 0; i < 32; i++) {
-            printf("%d ", r2[i]);
-        }
-        printf("\n");
+    // for (int i = 0; i < 32; i++) {
+    //         printf("%d ", r2[i]);
+    //     }
+    //     printf("\n");
 
     h2 = HMAC(EVP_sha256(), r2, hash_len, &temperature, 1, NULL, NULL);
 
@@ -579,84 +579,6 @@ int read_hmac(uint32_t hash_len) {
     return -1;
 }
 
-
-
-
-// int get_resonse() {
-//     FILE *fp;
-//     int rc = 0;
-//     int section_no = 0;
-//     int remainder_bit = 0;
-//     char response_name[3];
-
-//     section_no = (int) ceil(CHALLENGE_SIZE/MODBUS_MAX_READ_REGISTERS);
-
-//     for (int i = 0; i < section_no; i++) {
-//         rc = modbus_read_registers(context, 0, MODBUS_MAX_READ_REGISTERS, registers);
-//         if (rc == -1) {
-//             fprintf(stderr, "%s\n", modbus_strerror(errno));
-//             return -1;
-//         }
-//         memcpy(&raw_response[i*MODBUS_MAX_READ_REGISTERS], registers, MODBUS_MAX_READ_REGISTERS*sizeof(uint16_t));
-//     }
-
-//     remainder_bit = CHALLENGE_SIZE - MODBUS_MAX_READ_REGISTERS * (int) ceil(CHALLENGE_SIZE/MODBUS_MAX_READ_REGISTERS);
-//     if (remainder_bit > 0) {
-//         rc = modbus_read_registers(context, 0, remainder_bit, registers);
-//         if (rc == -1) {
-//             fprintf(stderr, "%s\n", modbus_strerror(errno));
-//             return -1;
-//         }
-//         memcpy(&raw_response[section_no*MODBUS_MAX_READ_REGISTERS], registers, remainder_bit*sizeof(uint16_t));
-//     }
-
-//     for (int i=0; i < CHALLENGE_SIZE; i++) {
-//         printf("%d ", raw_response[i]);
-//     }
-//     printf("\n\n");
-
-//     format_response();
-
-//     for (int i=0; i < CHALLENGE_SIZE/8; i++) {
-//         printf("%d ", final_response[i]);
-//     }
-//     printf("\n");
-
-//     return 0;
-// }
-
-// void get_file_response() {
-//     char challenge_name[3];
-//     int strong_bit = 0;
-//     char location[10];
-//     FILE *fp;
-//     uint8_t *file_response;
-
-//     file_response = (uint8_t *) malloc((CHALLENGE_SIZE / 8) * sizeof(uint8_t));
-//     if (file_response == NULL) {
-//         fprintf(stderr, "Failed to allocated memory");
-//         exit(1);
-//     }
-//     memset(file_response, 0, (CHALLENGE_SIZE / 8) * sizeof(uint8_t));
-
-//     if ((fp = fopen("../Enrollment/r87", "r")) == NULL) {
-//         printf("Error Opening File");
-//         exit(1);
-//     }
-
-//     while (fgets(location, sizeof(location), fp) != NULL) {
-//         file_response[strong_bit] = atoi(location);
-//         strong_bit++;
-//     }
-//     fclose(fp);
-
-//     for (int i = 0; i < CHALLENGE_SIZE/8; i++) {
-//         printf("%d ", file_response[i]);
-//     }
-//     printf("\n\n");
-
-// }
-
 int main(int argc, char **argv){
     int rc = 0;
     time_t ts = 0;
@@ -674,10 +596,10 @@ int main(int argc, char **argv){
         exit(EXIT_FAILURE);
     }
     // get_sha256(c2, c2_hash);
-    for (int i = 0; i < 256; i++) {
-        printf("%d ", c2[i]);
-    }
-    printf("\n");
+    // for (int i = 0; i < 256; i++) {
+    //     printf("%d ", c2[i]);
+    // }
+    // printf("\n");
     if (get_response() != 0) {
         printf("Failed to get response\n");
         exit(EXIT_FAILURE);
